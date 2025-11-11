@@ -1,0 +1,20 @@
+{
+  "name": "fredrick-slack-bot",
+  "version": "1.0.0",
+  "description": "fredrick - A Slack bot with configurable responses",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js",
+    "dev": "nodemon bot.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@slack/bolt": "^3.18.0",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  }
+}
