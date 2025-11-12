@@ -79,6 +79,37 @@ function saveLastCommit(hash) {
   }
 }
 
+// Handle /fredrickchannel command
+app.command("/fredrickchannel", async ({ command, ack, respond, client }) => {
+  await ack();
+  
+  const userId = command.user_id;
+  const authorizedUser = "U0926UASBJ7";
+  
+  if (userId !== authorizedUser) {
+    await respond({
+      text: "you're not authorized to use this command",
+      response_type: "ephemeral",
+    });
+    return;
+  }
+  
+  const text = command.text || "";
+  
+  try {
+    await client.chat.postMessage({
+      channel: command.channel_id,
+      text: `<!channel|channel> ${text}`,
+    });
+  } catch (error) {
+    console.error("Error posting channel message:", error.message);
+    await respond({
+      text: "error posting message",
+      response_type: "ephemeral",
+    });
+  }
+});
+
 // Listen for messages
 app.message(async ({ message, client, body }) => {
   console.log("Message received:", message.text);
