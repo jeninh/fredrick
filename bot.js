@@ -36,24 +36,24 @@ function getRandomStatus(statuses) {
   return statuses[Math.floor(Math.random() * statuses.length)];
 }
 
-// Get latest commit hash with full details
-function getLatestCommit() {
+// Get latest commit hash with full details from GitHub
+async function getLatestCommit() {
   try {
-    const hash = execSync("git rev-parse HEAD", { 
-      cwd: __dirname,
-      encoding: "utf-8" 
-    }).trim().substring(0, 7);
-    const message = execSync("git log -1 --pretty=%B", {
-      cwd: __dirname,
-      encoding: "utf-8"
-    }).trim();
-    const author = execSync("git log -1 --pretty=%an", {
-      cwd: __dirname,
-      encoding: "utf-8"
-    }).trim();
+    const response = await fetch("https://api.github.com/repos/jeninh/fredrick/commits?per_page=1");
+    const data = await response.json();
+    
+    if (!data || data.length === 0) {
+      return { hash: "unknown", message: "unknown", author: "unknown" };
+    }
+    
+    const commit = data[0];
+    const hash = commit.sha.substring(0, 7);
+    const message = commit.commit.message.split("\n")[0];
+    const author = commit.commit.author.name;
+    
     return { hash, message, author };
   } catch (error) {
-    console.error("Error getting commit info:", error.message);
+    console.error("Error getting commit info from GitHub:", error.message);
     return { hash: "unknown", message: "unknown", author: "unknown" };
   }
 }
@@ -121,10 +121,12 @@ async function checkForNewCommits() {
     if (hash !== lastCommitHash && hash !== "unknown") {
       // New commit found
       const channelId = "C0978HUQ36X";
+      const statuses = loadStatuses();
+      const randomStatus = getRandomStatus(statuses);
       
       await app.client.chat.postMessage({
         channel: channelId,
-        text: `i got a new commit gng! (<https://github.com/jeninh/fredrick/commit/${hash}|${hash}>)`,
+        text: `${randomStatus} ${message} <https://github.com/jeninh/fredrick/commit/${hash}|${hash}>`,
       });
       
       console.log("Commit notification sent:", hash);
