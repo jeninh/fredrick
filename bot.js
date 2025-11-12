@@ -1,6 +1,7 @@
 const { App } = require("@slack/bolt");
 const fs = require("fs");
 const path = require("path");
+const { execSync } = require("child_process");
 require("dotenv").config();
 
 // Initialize the Slack app
@@ -23,31 +24,125 @@ function getRandomResponse(responses) {
   return responses[Math.floor(Math.random() * responses.length)];
 }
 
-// Listen for mentions
-app.message(async ({ message, say, client }) => {
-  // Check if the message mentions the bot or is a reply to the bot
-  const isMentioningBot =
-    message.text && message.text.includes("<@" + (await app.client.auth.test()).user_id + ">");
+// Load statuses from JSON
+function loadStatuses() {
+  const statusPath = path.join(__dirname, "status.json");
+  const data = fs.readFileSync(statusPath, "utf-8");
+  return JSON.parse(data).statuses;
+}
+
+// Get random status
+function getRandomStatus(statuses) {
+  return statuses[Math.floor(Math.random() * statuses.length)];
+}
+
+// Get latest commit hash with full details
+function getLatestCommit() {
+  try {
+    const hash = execSync("git rev-parse HEAD", { 
+      cwd: __dirname,
+      encoding: "utf-8" 
+    }).trim().substring(0, 7);
+    const message = execSync("git log -1 --pretty=%B", {
+      cwd: __dirname,
+      encoding: "utf-8"
+    }).trim();
+    const author = execSync("git log -1 --pretty=%an", {
+      cwd: __dirname,
+      encoding: "utf-8"
+    }).trim();
+    return { hash, message, author };
+  } catch (error) {
+    console.error("Error getting commit info:", error.message);
+    return { hash: "unknown", message: "unknown", author: "unknown" };
+  }
+}
+
+// Load last commit from file
+function loadLastCommit() {
+  try {
+    const path2 = path.join(__dirname, "last_commit.json");
+    const data = fs.readFileSync(path2, "utf-8");
+    return JSON.parse(data).hash;
+  } catch (error) {
+    return "";
+  }
+}
+
+// Save last commit to file
+function saveLastCommit(hash) {
+  try {
+    const path2 = path.join(__dirname, "last_commit.json");
+    fs.writeFileSync(path2, JSON.stringify({ hash }, null, 2));
+  } catch (error) {
+    console.error("Error saving last commit:", error.message);
+  }
+}
+
+// Listen for messages
+app.message(async ({ message, client, body }) => {
+  console.log("Message received:", message.text);
   
-  if (isMentioningBot || message.thread_ts) {
+  // Check if message mentions the bot or contains "fredrick"
+  const botUserId = body.authorizations[0].user_id;
+  const hasMention = message.text && message.text.includes("<@" + botUserId + ">");
+  const hasFredrick = message.text && message.text.toLowerCase().includes("fredrick");
+  
+  console.log("Has mention:", hasMention, "Has fredrick:", hasFredrick);
+  
+  if (hasMention || hasFredrick) {
     try {
       const responses = loadResponses();
       const reply = getRandomResponse(responses);
 
-      // Reply in thread
-      await client.chat.postMessage({
+      console.log("Sending reply:", reply);
+      const result = await client.chat.postMessage({
         channel: message.channel,
         thread_ts: message.thread_ts || message.ts,
         text: reply,
       });
+      console.log("Message sent successfully:", result);
     } catch (error) {
-      console.error("Error sending message:", error);
+      console.error("Error sending message:", error.message);
+      console.error(error);
     }
   }
 });
+
+// Check for new commits and send message
+async function checkForNewCommits() {
+  try {
+    const lastCommitHash = loadLastCommit();
+    const { hash, message, author } = getLatestCommit();
+    
+    console.log("Last commit:", lastCommitHash);
+    console.log("Current commit:", hash);
+    
+    if (hash !== lastCommitHash && hash !== "unknown") {
+      // New commit found
+      const channelId = "C0978HUQ36X";
+      
+      await app.client.chat.postMessage({
+        channel: channelId,
+        text: `i got a new commit gng! (<https://github.com/jeninh/fredrick/commit/${hash}|${hash}>)`,
+      });
+      
+      console.log("Commit notification sent:", hash);
+      saveLastCommit(hash);
+    }
+  } catch (error) {
+    console.error("Error checking for commits:", error.message);
+  }
+}
 
 // Start the app
 (async () => {
   await app.start();
   console.log("fredrick is running!");
+  
+  // Check for new commits immediately on startup
+  await checkForNewCommits();
+  
+  // Then check every 3 minutes
+  setInterval(checkForNewCommits, 3 * 60 * 1000);
 })();
