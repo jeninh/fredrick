@@ -179,12 +179,8 @@ async function checkForNewCommits() {
   }
 }
 
-// Start the app
-(async () => {
-  await app.start();
-  console.log("fredrick is running!");
-  
-  // Send startup message
+// Send the ping message
+async function sendPingMessage() {
   try {
     const startTime = Date.now();
     await app.client.auth.test();
@@ -195,8 +191,49 @@ async function checkForNewCommits() {
       text: `boop! i am fredrick, and my ping is ${ping}ms!`,
     });
   } catch (error) {
-    console.error("Error sending startup message:", error.message);
+    console.error("Error sending ping message:", error.message);
   }
+}
+
+// Calculate milliseconds until next 3-hour interval (0, 3, 6, 9, 12, 15, 18, 21 hours)
+function getTimeUntilNextThreeHour() {
+  const now = new Date();
+  const currentHour = now.getHours();
+  
+  const intervals = [0, 3, 6, 9, 12, 15, 18, 21];
+  
+  // Find the next interval that's strictly greater than current hour
+  let nextHour = intervals.find(h => h > currentHour);
+  
+  const nextTime = new Date(now);
+  
+  if (nextHour === undefined) {
+    // All intervals are in the past, next one is at midnight tomorrow
+    nextHour = 0;
+    nextTime.setDate(nextTime.getDate() + 1);
+  }
+  
+  nextTime.setHours(nextHour, 0, 0, 0);
+  
+  return nextTime.getTime() - now.getTime();
+}
+
+// Start the app
+(async () => {
+  await app.start();
+  console.log("fredrick is running!");
+  
+  // Send startup message
+  await sendPingMessage();
+  
+  // Schedule ping message every 3 hours at :00
+  const timeUntilNext = getTimeUntilNextThreeHour();
+  setTimeout(() => {
+    sendPingMessage();
+    setInterval(sendPingMessage, 3 * 60 * 60 * 1000); // 3 hours in milliseconds
+  }, timeUntilNext);
+  
+  console.log(`Next ping message in ${Math.round(timeUntilNext / 1000)} seconds`);
   
   // Check for new commits immediately on startup
   await checkForNewCommits();
