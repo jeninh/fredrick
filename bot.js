@@ -97,9 +97,16 @@ app.command("/fredrickchannel", async ({ command, ack, respond, client }) => {
   const text = command.text || "";
   
   try {
+    // Get user profile info
+    const userInfo = await client.users.info({ user: userId });
+    const username = userInfo.user.real_name;
+    const profilePic = userInfo.user.profile.image_72;
+    
     await client.chat.postMessage({
       channel: command.channel_id,
       text: `<!channel|channel> ${text}`,
+      username: username,
+      icon_url: profilePic,
     });
   } catch (error) {
     console.error("Error posting channel message:", error.message);
