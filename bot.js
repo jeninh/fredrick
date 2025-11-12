@@ -146,6 +146,20 @@ async function checkForNewCommits() {
   await app.start();
   console.log("fredrick is running!");
   
+  // Send startup message
+  try {
+    const startTime = Date.now();
+    await app.client.auth.test();
+    const ping = Date.now() - startTime;
+    
+    await app.client.chat.postMessage({
+      channel: "C09BQEC01FZ",
+      text: `boop! i am fredrick, and my ping is ${ping}ms!`,
+    });
+  } catch (error) {
+    console.error("Error sending startup message:", error.message);
+  }
+  
   // Check for new commits immediately on startup
   await checkForNewCommits();
   
