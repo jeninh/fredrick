@@ -1,11 +1,11 @@
 {
   "name": "fredrick-slack-bot",
   "version": "1.0.0",
-  "description": "fredrick - A Slack bot with configurable responses",
-  "main": "bot.js",
+  "description": "fredrick - a multipurpose slack bot",
+  "main": "index.js",
   "scripts": {
-    "start": "node bot.js",
-    "dev": "nodemon bot.js"
+    "start": "node index.js",
+    "dev": "nodemon index.js"
   },
   "keywords": [],
   "author": "",
