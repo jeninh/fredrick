@@ -6,12 +6,40 @@ const processingConversations = new Set();
 // Cache for user info to avoid repeated API calls
 const userCache = {};
 
-async function getUserInfo(userId) {
+async function getUserInfo(client, userId) {
   if (userCache[userId]) {
     return userCache[userId];
   }
-  // Placeholder, will be filled in by client
-  return { real_name: userId, display_name: userId };
+  try {
+    const userInfo = await client.users.info({ user: userId });
+    userCache[userId] = {
+      real_name: userInfo.user.real_name,
+      display_name: userInfo.user.profile.display_name || userInfo.user.real_name,
+    };
+    return userCache[userId];
+  } catch (e) {
+    userCache[userId] = { real_name: userId, display_name: userId };
+    return userCache[userId];
+  }
+}
+
+// Parse mentions in text and replace with display names
+async function parseMessageWithNames(text, client) {
+  if (!text) return text;
+  
+  // Find all mentions like <@USERID>
+  const mentionRegex = /<@([A-Z0-9]+)>/g;
+  let result = text;
+  
+  let match;
+  while ((match = mentionRegex.exec(text)) !== null) {
+    const userId = match[1];
+    const userInfo = await getUserInfo(client, userId);
+    const displayName = userInfo.display_name || userInfo.real_name;
+    result = result.replace(`<@${userId}>`, `@${displayName}`);
+  }
+  
+  return result;
 }
 
 function registerMessageListener(app) {
@@ -109,9 +137,17 @@ function registerMessageListener(app) {
       // Mark this conversation as being processed
       processingConversations.add(conversationId);
 
+      // Get sender's display name
+      const senderInfo = await getUserInfo(client, message.user);
+      console.log("Sender:", senderInfo.display_name);
+
+      // Parse message text to replace mentions with display names
+      const parsedMessage = await parseMessageWithNames(message.text, client);
+      console.log("Parsed message:", parsedMessage);
+
       console.log("Thread context:", threadContext);
 
-      const reply = await getAIResponse(message.text, threadContext);
+      const reply = await getAIResponse(parsedMessage, threadContext, senderInfo);
 
       console.log("Sending reply:", reply);
       const result = await client.chat.postMessage({
