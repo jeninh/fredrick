@@ -46,12 +46,6 @@ function registerMessageListener(app) {
   app.message(async ({ message, client, body }) => {
     console.log("Message received:", message.text);
 
-    // Ignore bot messages
-    if (message.bot_id) {
-      console.log("Bot message, ignoring");
-      return;
-    }
-
     // Create a unique ID for this conversation (thread or channel)
     const conversationId = message.thread_ts || message.channel;
 
