@@ -2,6 +2,7 @@ const { App } = require("@slack/bolt");
 require("dotenv").config();
 
 const { registerChannelCommand } = require("./commands/channel");
+const { registerFindEmailCommand } = require("./commands/find-email");
 const { registerMessageListener } = require("./listeners/messages");
 const { checkForNewCommits } = require("./features/commits");
 const { sendPingMessage, schedulePingMessages } = require("./features/ping");
@@ -14,6 +15,7 @@ const app = new App({
 });
 
 registerChannelCommand(app);
+registerFindEmailCommand(app);
 registerMessageListener(app);
 
 (async () => {
