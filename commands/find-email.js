@@ -54,10 +54,10 @@ function registerFindEmailCommand(app) {
         return;
       }
 
-      const data = await response.json();
+      const email = await response.text();
 
       await respond({
-        text: `<@${cleanId}> -> ${data.email || "no email found"}`,
+        text: `<@${cleanId}> -> ${email}`,
         response_type: "in_channel",
       });
     } catch (error) {
