@@ -3,6 +3,9 @@ const { getAIResponse } = require("../lib/ai");
 // Track conversations currently being processed to avoid ladder typing spam
 const processingConversations = new Set();
 
+// Track threads in "check emails" mode
+const checkEmailsThreads = new Set();
+
 // Cache for user info to avoid repeated API calls
 const userCache = {};
 
@@ -59,8 +62,79 @@ function registerMessageListener(app) {
       let shouldRespond = false;
       let threadContext = "";
 
+      // Check if this is a new thread (parent message)
+      if (!message.thread_ts) {
+        // Check if it's a "CHECK EMAILS" command
+        if (message.text && message.text.toLowerCase().includes("fredrick") && message.text.toUpperCase().includes("CHECK EMAILS")) {
+          console.log("Enabling CHECK EMAILS mode for thread:", message.ts);
+          checkEmailsThreads.add(message.ts);
+        }
+      }
+
       // Check if this is a thread reply
       if (message.thread_ts) {
+        // Check if this thread is in CHECK EMAILS mode
+        if (checkEmailsThreads.has(message.thread_ts)) {
+          console.log("Thread is in CHECK EMAILS mode");
+          
+          // Extract mentions from message
+          const mentionRegex = /<@([A-Z0-9]+)>/g;
+          let match;
+          const mentions = [];
+          
+          while ((match = mentionRegex.exec(message.text)) !== null) {
+            mentions.push(match[1]);
+          }
+          
+          console.log("Found mentions:", mentions);
+          
+          if (mentions.length > 0) {
+            // Mark as processing to avoid ladder typing
+            processingConversations.add(conversationId);
+            
+            try {
+              const apiKey = process.env.WHOIS_API_KEY;
+              if (apiKey) {
+                const emails = [];
+                
+                for (const userId of mentions) {
+                  try {
+                    const response = await fetch(
+                      `https://whois.hacktable.org/?userId=${userId}`,
+                      {
+                        headers: {
+                          "x-api-key": apiKey,
+                        },
+                      }
+                    );
+                    
+                    if (response.ok) {
+                      const email = await response.text();
+                      emails.push(`<@${userId}> -> ${email}`);
+                    }
+                  } catch (e) {
+                    console.error("Error fetching email for", userId, e);
+                  }
+                }
+                
+                if (emails.length > 0) {
+                  const result = await client.chat.postMessage({
+                    channel: message.channel,
+                    thread_ts: message.thread_ts,
+                    text: emails.join("\n"),
+                  });
+                  console.log("Emails sent successfully:", result);
+                }
+              }
+            } catch (error) {
+              console.error("Error in CHECK EMAILS mode:", error.message);
+            } finally {
+              processingConversations.delete(conversationId);
+            }
+            return;
+          }
+        }
+        
         // Get parent message to check if it mentions fredrick or the user
         const parentMessage = await client.conversations.history({
           channel: message.channel,
