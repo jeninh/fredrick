@@ -32,17 +32,27 @@ async function parseMessageWithNames(text, client) {
   
   // Find all mentions like <@USERID>
   const mentionRegex = /<@([A-Z0-9]+)>/g;
-  let result = text;
   
+  // Collect all unique user IDs
+  const userIds = new Set();
   let match;
   while ((match = mentionRegex.exec(text)) !== null) {
-    const userId = match[1];
-    const userInfo = await getUserInfo(client, userId);
-    const displayName = userInfo.display_name || userInfo.real_name;
-    result = result.replace(`<@${userId}>`, `@${displayName}`);
+    userIds.add(match[1]);
   }
   
-  return result;
+  // Fetch all user info in parallel
+  const userInfoPromises = Array.from(userIds).map(async (userId) => {
+    const userInfo = await getUserInfo(client, userId);
+    return [userId, userInfo.display_name || userInfo.real_name];
+  });
+  
+  const userInfoEntries = await Promise.all(userInfoPromises);
+  const userIdToName = Object.fromEntries(userInfoEntries);
+  
+  // Replace all mentions in one pass using a callback function
+  return text.replace(/<@([A-Z0-9]+)>/g, (match, userId) => {
+    return `@${userIdToName[userId] || userId}`;
+  });
 }
 
 function registerMessageListener(app) {
@@ -95,9 +105,8 @@ function registerMessageListener(app) {
             try {
               const apiKey = process.env.WHOIS_API_KEY;
               if (apiKey) {
-                const emails = [];
-                
-                for (const userId of mentions) {
+                // Fetch all emails in parallel for better performance
+                const emailPromises = mentions.map(async (userId) => {
                   try {
                     const response = await fetch(
                       `https://whois.hacktable.org/?userId=${userId}`,
@@ -110,12 +119,16 @@ function registerMessageListener(app) {
                     
                     if (response.ok) {
                       const email = await response.text();
-                      emails.push(`<@${userId}> -> ${email}`);
+                      return `<@${userId}> -> ${email}`;
                     }
                   } catch (e) {
                     console.error("Error fetching email for", userId, e);
                   }
-                }
+                  return null;
+                });
+                
+                const emailResults = await Promise.all(emailPromises);
+                const emails = emailResults.filter(email => email !== null);
                 
                 if (emails.length > 0) {
                   const result = await client.chat.postMessage({
@@ -162,22 +175,33 @@ function registerMessageListener(app) {
 
             // Build context from thread messages with user info
             if (threadHistory.messages) {
+              // Collect all unique user IDs first
+              const uniqueUserIds = [...new Set(
+                threadHistory.messages
+                  .filter(msg => msg.user && !userCache[msg.user])
+                  .map(msg => msg.user)
+              )];
+              
+              // Fetch all missing user info in parallel
+              const userInfoPromises = uniqueUserIds.map(async (userId) => {
+                try {
+                  const userInfo = await client.users.info({ user: userId });
+                  userCache[userId] = {
+                    real_name: userInfo.user.real_name,
+                    display_name: userInfo.user.profile.display_name || userInfo.user.real_name,
+                  };
+                } catch (e) {
+                  userCache[userId] = { real_name: userId, display_name: userId };
+                }
+              });
+              
+              await Promise.all(userInfoPromises);
+              
+              // Now build context with all user info available
               const contextMessages = [];
               for (const msg of threadHistory.messages) {
                 let username = "bot";
-                if (msg.user) {
-                  // Fetch user info and cache it
-                  if (!userCache[msg.user]) {
-                    try {
-                      const userInfo = await client.users.info({ user: msg.user });
-                      userCache[msg.user] = {
-                        real_name: userInfo.user.real_name,
-                        display_name: userInfo.user.profile.display_name || userInfo.user.real_name,
-                      };
-                    } catch (e) {
-                      userCache[msg.user] = { real_name: msg.user, display_name: msg.user };
-                    }
-                  }
+                if (msg.user && userCache[msg.user]) {
                   const userInfo = userCache[msg.user];
                   username = userInfo.display_name || userInfo.real_name;
                 }
